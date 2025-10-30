@@ -30,7 +30,9 @@ impl IntoResponse for AppError {
             AppError::ProcessExecutionError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::SessionNotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-            AppError::SerializationError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+            AppError::SerializationError(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
         };
 
         let body = Json(json!({

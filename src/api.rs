@@ -10,11 +10,7 @@ use axum::{
 };
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    sync::Arc,
-};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
@@ -90,7 +86,10 @@ async fn spawn(
 
     // Create session if requested
     let session_id = if payload.create_session {
-        let metadata = state.session_store.create_session(payload.agent_type.clone()).await?;
+        let metadata = state
+            .session_store
+            .create_session(payload.agent_type.clone())
+            .await?;
         Some(metadata.session_id)
     } else {
         None
@@ -111,7 +110,11 @@ async fn spawn(
 
     // Store the process if we have a session_id
     if let Some(ref sid) = session_id {
-        state.running_processes.lock().await.insert(sid.clone(), child);
+        state
+            .running_processes
+            .lock()
+            .await
+            .insert(sid.clone(), child);
     }
 
     // Create SSE stream
@@ -194,7 +197,11 @@ async fn message(
     let (child, mut rx) = state.agent_runner.spawn(agent_request).await?;
 
     // Store the process
-    state.running_processes.lock().await.insert(session_id.clone(), child);
+    state
+        .running_processes
+        .lock()
+        .await
+        .insert(session_id.clone(), child);
 
     // Create SSE stream
     let stream = async_stream::stream! {
@@ -246,7 +253,7 @@ async fn terminate(
     info!("Terminate request: session_id={}", session_id);
 
     let mut processes = state.running_processes.lock().await;
-    
+
     if let Some(child) = processes.remove(&session_id) {
         AgentRunner::terminate(child).await?;
         Ok((
@@ -308,9 +315,9 @@ pub async fn serve(addr: &str, config: Arc<ServerConfig>) -> anyhow::Result<()> 
 
     let app = app(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    
+
     info!("Server listening on http://{}", addr);
-    
+
     axum::serve(listener, app).await?;
 
     Ok(())

@@ -5,7 +5,10 @@ async fn test_session_store_create() {
     let temp_dir = tempfile::tempdir().unwrap();
     let store = SessionStore::new(temp_dir.path());
 
-    let metadata = store.create_session("test_agent".to_string()).await.unwrap();
+    let metadata = store
+        .create_session("test_agent".to_string())
+        .await
+        .unwrap();
 
     assert_eq!(metadata.agent_type, "test_agent");
     assert!(!metadata.session_id.is_empty());

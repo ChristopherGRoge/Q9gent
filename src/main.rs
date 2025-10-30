@@ -1,8 +1,8 @@
 mod agent;
 mod api;
+mod config;
 mod error;
 mod session;
-mod config;
 
 use anyhow::Result;
 use clap::Parser;
@@ -51,9 +51,9 @@ async fn main() -> Result<()> {
     tokio::fs::create_dir_all(&config.session_dir).await?;
 
     let addr = format!("{}:{}", args.host, args.port);
-    
+
     tracing::info!("Starting Q9gent server on {}", addr);
-    
+
     api::serve(&addr, config).await?;
 
     Ok(())

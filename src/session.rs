@@ -60,7 +60,7 @@ impl SessionStore {
     /// Load session metadata from disk
     pub async fn load_session(&self, session_id: &str) -> AppResult<SessionMetadata> {
         let path = self.session_path(session_id);
-        
+
         if !path.exists() {
             return Err(AppError::SessionNotFound(session_id.to_string()));
         }
@@ -84,4 +84,3 @@ impl SessionStore {
 
 #[cfg(test)]
 mod tests;
-

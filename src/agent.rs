@@ -11,21 +11,21 @@ use crate::error::{AppError, AppResult};
 pub struct AgentRequest {
     /// Type of agent (informational, not used by claude CLI)
     pub agent_type: String,
-    
+
     /// The prompt to send to the agent
     pub prompt: String,
-    
+
     /// Additional CLI flags as key-value pairs
     #[serde(default)]
     pub flags: Vec<String>,
-    
+
     /// Allowed tools for the agent (--allowedTools flag)
     #[serde(default)]
     pub tools_allowed: Vec<String>,
-    
+
     /// System prompt to append (--append-system-prompt flag)
     pub system_append: Option<String>,
-    
+
     /// Resume session ID (--resume flag)
     pub resume_id: Option<String>,
 }
@@ -79,7 +79,7 @@ impl AgentRunner {
         request: AgentRequest,
     ) -> AppResult<(Child, mpsc::Receiver<AppResult<String>>)> {
         let args = self.build_command(&request);
-        
+
         debug!("Spawning claude process: {} {:?}", self.claude_path, args);
 
         let mut child = Command::new(&self.claude_path)
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_build_command() {
         let runner = AgentRunner::new("claude".to_string());
-        
+
         let request = AgentRequest {
             agent_type: "test".to_string(),
             prompt: "Hello world".to_string(),
@@ -163,7 +163,7 @@ mod tests {
         };
 
         let args = runner.build_command(&request);
-        
+
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"Hello world".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
