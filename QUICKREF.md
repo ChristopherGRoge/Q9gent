@@ -4,12 +4,12 @@
 
 ```bash
 # From source
-git clone https://github.com/yourusername/Q9gent.git
+git clone https://github.com/ChristopherGRoge/Q9gent.git
 cd Q9gent
 cargo build --release
 
 # Or download from releases
-# https://github.com/yourusername/Q9gent/releases
+# https://github.com/ChristopherGRoge/Q9gent/releases
 ```
 
 ## Start Server

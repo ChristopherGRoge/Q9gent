@@ -15,7 +15,7 @@
 
 ### 1. Clone and Build
 ```bash
-git clone https://github.com/yourusername/Q9gent.git
+git clone https://github.com/ChristopherGRoge/Q9gent.git
 cd Q9gent
 cargo build --release
 ```

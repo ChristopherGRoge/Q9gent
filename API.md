@@ -363,6 +363,6 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## Support
 
-- **Issues:** https://github.com/yourusername/Q9gent/issues
-- **Discussions:** https://github.com/yourusername/Q9gent/discussions
+- **Issues:** https://github.com/ChristopherGRoge/Q9gent/issues
+- **Discussions:** https://github.com/ChristopherGRoge/Q9gent/discussions
 - **Documentation:** See [README.md](README.md) and [EXAMPLES.md](EXAMPLES.md)

@@ -26,14 +26,14 @@ The server is a thin wrapper around Claude CLI that:
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/Q9gent.git
+git clone https://github.com/ChristopherGRoge/Q9gent.git
 cd Q9gent
 cargo build --release
 ```
 
 ### From Releases
 
-Download pre-built binaries from the [Releases](https://github.com/yourusername/Q9gent/releases) page:
+Download pre-built binaries from the [Releases](https://github.com/ChristopherGRoge/Q9gent/releases) page:
 
 - **Windows**: `q9gent-windows-x86_64.exe`, `q9gent-windows-i686.exe`, `q9gent-windows-aarch64.exe`
 - **Linux**: `q9gent-linux-x86_64`, `q9gent-linux-aarch64`, `q9gent-linux-x86_64-musl`
