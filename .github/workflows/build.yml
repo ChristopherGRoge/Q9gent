@@ -24,38 +24,46 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact_name: q9gent.exe
             asset_name: q9gent-windows-x86_64.exe
+            use_cross: false
           - os: windows-latest
             target: i686-pc-windows-msvc
             artifact_name: q9gent.exe
             asset_name: q9gent-windows-i686.exe
+            use_cross: false
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             artifact_name: q9gent.exe
             asset_name: q9gent-windows-aarch64.exe
+            use_cross: false
           
           # Linux builds
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: q9gent
             asset_name: q9gent-linux-x86_64
+            use_cross: false
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact_name: q9gent
             asset_name: q9gent-linux-x86_64-musl
+            use_cross: true
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             artifact_name: q9gent
             asset_name: q9gent-linux-aarch64
+            use_cross: true
           
           # macOS builds
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: q9gent
             asset_name: q9gent-macos-x86_64
+            use_cross: false
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: q9gent
             asset_name: q9gent-macos-aarch64
+            use_cross: false
 
     steps:
       - name: Checkout code
@@ -66,14 +74,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install cross
+        if: matrix.use_cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Install cross-compilation tools (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.use_cross == false
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
+
+      - name: Configure cross-compilation (ARM64 Linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          echo "[target.aarch64-unknown-linux-gnu]" >> ~/.cargo/config.toml
+          echo "linker = \"aarch64-linux-gnu-gcc\"" >> ~/.cargo/config.toml
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -94,7 +109,13 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
 
       - name: Prepare artifact (Unix)
         if: runner.os != 'Windows'
