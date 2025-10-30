@@ -52,24 +52,6 @@ async fn test_session_store_touch() {
 }
 
 #[tokio::test]
-async fn test_session_store_delete() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::new(temp_dir.path());
-
-    let metadata = store.create_session("test".to_string()).await.unwrap();
-    
-    // Verify it exists
-    store.load_session(&metadata.session_id).await.unwrap();
-
-    // Delete it
-    store.delete_session(&metadata.session_id).await.unwrap();
-
-    // Verify it's gone
-    let result = store.load_session(&metadata.session_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
 async fn test_session_not_found() {
     let temp_dir = tempfile::tempdir().unwrap();
     let store = SessionStore::new(temp_dir.path());

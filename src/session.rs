@@ -80,15 +80,6 @@ impl SessionStore {
         self.save_session(&metadata).await?;
         Ok(())
     }
-
-    /// Delete session metadata
-    pub async fn delete_session(&self, session_id: &str) -> AppResult<()> {
-        let path = self.session_path(session_id);
-        if path.exists() {
-            fs::remove_file(path).await?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]

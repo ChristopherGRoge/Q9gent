@@ -8,13 +8,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures::stream::{self, Stream};
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     convert::Infallible,
     sync::Arc,
-    time::Duration,
 };
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -51,13 +50,6 @@ struct SpawnRequest {
     /// Whether to create a new session for resumption
     #[serde(default)]
     create_session: bool,
-}
-
-/// Spawn response
-#[derive(Debug, Serialize)]
-struct SpawnResponse {
-    session_id: Option<String>,
-    message: String,
 }
 
 /// Message request payload (for resuming sessions)

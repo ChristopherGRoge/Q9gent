@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
 
@@ -28,13 +28,6 @@ pub struct AgentRequest {
     
     /// Resume session ID (--resume flag)
     pub resume_id: Option<String>,
-}
-
-/// Agent response - a single JSONL line from claude
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentResponse {
-    /// The raw JSONL line from claude stdout
-    pub line: String,
 }
 
 /// Agent runner - spawns and manages claude CLI processes
@@ -149,24 +142,6 @@ impl AgentRunner {
             .await
             .map_err(|e| AppError::ProcessExecutionError(e.to_string()))?;
         Ok(())
-    }
-
-    /// Wait for a process to complete
-    pub async fn wait(mut child: Child) -> AppResult<i32> {
-        let status = child
-            .wait()
-            .await
-            .map_err(|e| AppError::ProcessExecutionError(e.to_string()))?;
-
-        let code = status.code().unwrap_or(-1);
-        
-        if status.success() {
-            info!("Claude process exited successfully");
-        } else {
-            error!("Claude process exited with code: {}", code);
-        }
-
-        Ok(code)
     }
 }
 

@@ -16,17 +16,11 @@ pub enum AppError {
     #[error("Session not found: {0}")]
     SessionNotFound(String),
 
-    #[error("Invalid request: {0}")]
-    InvalidRequest(String),
-
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-
-    #[error("Internal error: {0}")]
-    Internal(String),
 }
 
 impl IntoResponse for AppError {
@@ -35,10 +29,8 @@ impl IntoResponse for AppError {
             AppError::ProcessSpawnFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::ProcessExecutionError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::SessionNotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            AppError::InvalidRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             AppError::SerializationError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
 
         let body = Json(json!({
