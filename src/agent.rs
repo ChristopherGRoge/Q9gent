@@ -152,13 +152,10 @@ impl AgentRunner {
     pub async fn terminate(mut child: Child) -> AppResult<()> {
         let pid = child.id();
         info!("🛑 Terminating Claude process - PID: {:?}", pid);
-        child
-            .kill()
-            .await
-            .map_err(|e| {
-                warn!("Failed to kill process: {}", e);
-                AppError::ProcessExecutionError(e.to_string())
-            })?;
+        child.kill().await.map_err(|e| {
+            warn!("Failed to kill process: {}", e);
+            AppError::ProcessExecutionError(e.to_string())
+        })?;
         info!("✓ Process terminated");
         Ok(())
     }

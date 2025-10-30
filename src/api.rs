@@ -82,14 +82,18 @@ async fn spawn(
 ) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
     info!(
         "🚀 Spawn request - agent_type: '{}', create_session: {}, tools: {:?}, prompt_length: {} chars",
-        payload.agent_type, 
+        payload.agent_type,
         payload.create_session,
         payload.tools_allowed,
         payload.prompt.len()
     );
-    debug!("Spawn request details - flags: {:?}, system_append: {:?}, resume_id: {:?}", 
-        payload.flags, 
-        payload.system_append.as_ref().map(|s| format!("{}...", &s.chars().take(50).collect::<String>())),
+    debug!(
+        "Spawn request details - flags: {:?}, system_append: {:?}, resume_id: {:?}",
+        payload.flags,
+        payload
+            .system_append
+            .as_ref()
+            .map(|s| format!("{}...", &s.chars().take(50).collect::<String>())),
         payload.resume_id
     );
 
