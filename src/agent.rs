@@ -80,7 +80,8 @@ impl AgentRunner {
     ) -> AppResult<(Child, mpsc::Receiver<AppResult<String>>)> {
         let args = self.build_command(&request);
 
-        debug!("Spawning claude process: {} {:?}", self.claude_path, args);
+        info!("🔨 Building Claude command - {} args", args.len());
+        debug!("Command: {} {:?}", self.claude_path, args);
 
         let mut child = Command::new(&self.claude_path)
             .args(&args)
@@ -88,7 +89,13 @@ impl AgentRunner {
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| AppError::ProcessSpawnFailed(e.to_string()))?;
+            .map_err(|e| {
+                warn!("❌ Failed to spawn Claude process: {}", e);
+                AppError::ProcessSpawnFailed(e.to_string())
+            })?;
+
+        let pid = child.id();
+        info!("✓ Claude process spawned - PID: {:?}", pid);
 
         let stdout = child
             .stdout
@@ -107,15 +114,22 @@ impl AgentRunner {
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
+            let mut line_count = 0;
 
             while let Ok(Some(line)) = lines.next_line().await {
                 if !line.is_empty() {
-                    debug!("Claude stdout: {}", line);
+                    line_count += 1;
+                    if line_count == 1 {
+                        debug!("📥 First line from Claude stdout");
+                    }
+                    debug!("Claude stdout line {}: {} chars", line_count, line.len());
                     if tx_clone.send(Ok(line)).await.is_err() {
+                        debug!("Channel closed, stopping stdout reader");
                         break;
                     }
                 }
             }
+            debug!("📊 Stdout reader finished - {} lines read", line_count);
         });
 
         // Spawn task to log stderr
@@ -125,22 +139,27 @@ impl AgentRunner {
 
             while let Ok(Some(line)) = lines.next_line().await {
                 if !line.is_empty() {
-                    warn!("Claude stderr: {}", line);
+                    warn!("⚠️  Claude stderr: {}", line);
                 }
             }
+            debug!("Stderr reader finished");
         });
 
-        info!("Claude process spawned successfully");
         Ok((child, rx))
     }
 
     /// Terminate a running process
     pub async fn terminate(mut child: Child) -> AppResult<()> {
-        debug!("Terminating claude process");
+        let pid = child.id();
+        info!("🛑 Terminating Claude process - PID: {:?}", pid);
         child
             .kill()
             .await
-            .map_err(|e| AppError::ProcessExecutionError(e.to_string()))?;
+            .map_err(|e| {
+                warn!("Failed to kill process: {}", e);
+                AppError::ProcessExecutionError(e.to_string())
+            })?;
+        info!("✓ Process terminated");
         Ok(())
     }
 }

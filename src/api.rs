@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::info;
+use tracing::{debug, error, info, warn};
 
 use crate::{
     agent::{AgentRequest, AgentRunner},
@@ -68,6 +68,7 @@ struct HealthResponse {
 
 /// Health check endpoint
 async fn health() -> Json<HealthResponse> {
+    debug!("Health check requested");
     Json(HealthResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -80,8 +81,16 @@ async fn spawn(
     Json(payload): Json<SpawnRequest>,
 ) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
     info!(
-        "Spawn request: agent_type={}, create_session={}",
-        payload.agent_type, payload.create_session
+        "🚀 Spawn request - agent_type: '{}', create_session: {}, tools: {:?}, prompt_length: {} chars",
+        payload.agent_type, 
+        payload.create_session,
+        payload.tools_allowed,
+        payload.prompt.len()
+    );
+    debug!("Spawn request details - flags: {:?}, system_append: {:?}, resume_id: {:?}", 
+        payload.flags, 
+        payload.system_append.as_ref().map(|s| format!("{}...", &s.chars().take(50).collect::<String>())),
+        payload.resume_id
     );
 
     // Create session if requested
@@ -90,8 +99,10 @@ async fn spawn(
             .session_store
             .create_session(payload.agent_type.clone())
             .await?;
+        info!("📝 Created session: {}", metadata.session_id);
         Some(metadata.session_id)
     } else {
+        debug!("No session requested (stateless mode)");
         None
     };
 
@@ -106,7 +117,9 @@ async fn spawn(
     };
 
     // Spawn the claude process
+    info!("⚡ Spawning Claude CLI process...");
     let (child, mut rx) = state.agent_runner.spawn(agent_request).await?;
+    info!("✓ Claude process spawned successfully");
 
     // Store the process if we have a session_id
     if let Some(ref sid) = session_id {
@@ -115,12 +128,16 @@ async fn spawn(
             .lock()
             .await
             .insert(sid.clone(), child);
+        debug!("Stored process for session: {}", sid);
     }
 
     // Create SSE stream
+    let stream_session_id = session_id.clone();
+    let running_procs = state.running_processes.clone();
     let stream = async_stream::stream! {
         // Send initial session info if available
-        if let Some(ref sid) = session_id {
+        if let Some(ref sid) = stream_session_id {
+            info!("📤 Sending session_created event for: {}", sid);
             let event = Event::default()
                 .json_data(serde_json::json!({
                     "type": "session_created",
@@ -130,10 +147,16 @@ async fn spawn(
             yield Ok(event);
         }
 
+        let mut output_count = 0;
         // Stream JSONL lines from claude
         while let Some(result) = rx.recv().await {
             match result {
                 Ok(line) => {
+                    output_count += 1;
+                    if output_count == 1 {
+                        info!("📥 First output received from Claude");
+                    }
+                    debug!("Output line {}: {} bytes", output_count, line.len());
                     let event = Event::default()
                         .json_data(serde_json::json!({
                             "type": "output",
@@ -143,6 +166,7 @@ async fn spawn(
                     yield Ok(event);
                 }
                 Err(e) => {
+                    error!("❌ Error from Claude process: {}", e);
                     let event = Event::default()
                         .json_data(serde_json::json!({
                             "type": "error",
@@ -155,6 +179,7 @@ async fn spawn(
             }
         }
 
+        info!("✅ Claude process completed - {} output lines sent", output_count);
         // Send completion event
         let event = Event::default()
             .json_data(serde_json::json!({
@@ -164,8 +189,9 @@ async fn spawn(
         yield Ok(event);
 
         // Clean up running process
-        if let Some(ref sid) = session_id {
-            state.running_processes.lock().await.remove(sid);
+        if let Some(ref sid) = stream_session_id {
+            running_procs.lock().await.remove(sid);
+            debug!("🧹 Cleaned up process for session: {}", sid);
         }
     };
 
@@ -178,10 +204,16 @@ async fn message(
     Path(session_id): Path<String>,
     Json(payload): Json<MessageRequest>,
 ) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
-    info!("Message request: session_id={}", session_id);
+    info!(
+        "💬 Message request - session_id: {}, tools: {:?}, prompt_length: {} chars",
+        session_id,
+        payload.tools_allowed,
+        payload.prompt.len()
+    );
 
     // Verify session exists and update last_used
     state.session_store.touch_session(&session_id).await?;
+    info!("✓ Session found and updated: {}", session_id);
 
     // Build agent request with resume
     let agent_request = AgentRequest {
@@ -194,7 +226,9 @@ async fn message(
     };
 
     // Spawn the claude process
+    info!("⚡ Resuming Claude session...");
     let (child, mut rx) = state.agent_runner.spawn(agent_request).await?;
+    info!("✓ Claude process resumed successfully");
 
     // Store the process
     state
@@ -202,13 +236,22 @@ async fn message(
         .lock()
         .await
         .insert(session_id.clone(), child);
+    debug!("Stored resumed process for session: {}", session_id);
 
     // Create SSE stream
+    let stream_session_id = session_id.clone();
+    let running_procs = state.running_processes.clone();
     let stream = async_stream::stream! {
+        let mut output_count = 0;
         // Stream JSONL lines from claude
         while let Some(result) = rx.recv().await {
             match result {
                 Ok(line) => {
+                    output_count += 1;
+                    if output_count == 1 {
+                        info!("📥 First output received from resumed session");
+                    }
+                    debug!("Resume output line {}: {} bytes", output_count, line.len());
                     let event = Event::default()
                         .json_data(serde_json::json!({
                             "type": "output",
@@ -218,6 +261,7 @@ async fn message(
                     yield Ok(event);
                 }
                 Err(e) => {
+                    error!("❌ Error from resumed session: {}", e);
                     let event = Event::default()
                         .json_data(serde_json::json!({
                             "type": "error",
@@ -230,6 +274,7 @@ async fn message(
             }
         }
 
+        info!("✅ Resumed session completed - {} output lines sent", output_count);
         // Send completion event
         let event = Event::default()
             .json_data(serde_json::json!({
@@ -239,7 +284,8 @@ async fn message(
         yield Ok(event);
 
         // Clean up running process
-        state.running_processes.lock().await.remove(&session_id);
+        running_procs.lock().await.remove(&stream_session_id);
+        debug!("🧹 Cleaned up resumed session: {}", stream_session_id);
     };
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
@@ -250,12 +296,13 @@ async fn terminate(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> AppResult<impl IntoResponse> {
-    info!("Terminate request: session_id={}", session_id);
+    info!("🛑 Terminate request - session_id: {}", session_id);
 
     let mut processes = state.running_processes.lock().await;
 
     if let Some(child) = processes.remove(&session_id) {
         AgentRunner::terminate(child).await?;
+        info!("✓ Process terminated successfully: {}", session_id);
         Ok((
             StatusCode::OK,
             Json(serde_json::json!({
@@ -263,12 +310,14 @@ async fn terminate(
             })),
         ))
     } else {
+        warn!("⚠️  No running process found for session: {}", session_id);
         Err(AppError::SessionNotFound(session_id))
     }
 }
 
 /// List sessions endpoint
 async fn list_sessions(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
+    info!("📋 List sessions request");
     let session_dir = &state.config.session_dir;
     let mut sessions = Vec::new();
 
@@ -284,6 +333,8 @@ async fn list_sessions(State(state): State<AppState>) -> AppResult<Json<serde_js
         }
     }
 
+    info!("✓ Found {} sessions", sessions.len());
+    debug!("Session details: {:?}", sessions);
     Ok(Json(serde_json::json!({ "sessions": sessions })))
 }
 
@@ -316,7 +367,8 @@ pub async fn serve(addr: &str, config: Arc<ServerConfig>) -> anyhow::Result<()> 
     let app = app(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
-    info!("Server listening on http://{}", addr);
+    info!("🚀 Server listening on http://{}", addr);
+    info!("📍 Endpoints: /health, /spawn, /message/:id, /terminate/:id, /sessions");
 
     axum::serve(listener, app).await?;
 

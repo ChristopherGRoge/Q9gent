@@ -35,12 +35,16 @@ async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "q9gent=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "q9gent=info,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     let args = Args::parse();
+
+    tracing::info!("🎯 Q9gent v{} starting...", env!("CARGO_PKG_VERSION"));
+    tracing::info!("📂 Session directory: {}", args.session_dir);
+    tracing::info!("🔧 Claude CLI path: {}", args.claude_path);
 
     let config = Arc::new(config::ServerConfig {
         claude_path: args.claude_path,
@@ -49,10 +53,9 @@ async fn main() -> Result<()> {
 
     // Create session directory if it doesn't exist
     tokio::fs::create_dir_all(&config.session_dir).await?;
+    tracing::debug!("✓ Session directory ready");
 
     let addr = format!("{}:{}", args.host, args.port);
-
-    tracing::info!("Starting Q9gent server on {}", addr);
 
     api::serve(&addr, config).await?;
 
