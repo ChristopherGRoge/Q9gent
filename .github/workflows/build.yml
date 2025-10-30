@@ -147,13 +147,37 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R artifacts
 
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f -exec sh -c 'sha256sum "$1" | sed "s|./||" >> ../SHA256SUMS.txt' _ {} \;
+          cd ..
+          cat SHA256SUMS.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/*/*
+          files: |
+            artifacts/*/*
+            SHA256SUMS.txt
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ## Verify Download Integrity
+            
+            After downloading, verify the SHA256 checksum:
+            
+            **Windows (PowerShell):**
+            ```powershell
+            Get-FileHash q9gent-windows-x86_64.exe -Algorithm SHA256
+            # Compare output with SHA256SUMS.txt
+            ```
+            
+            **Linux/macOS:**
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

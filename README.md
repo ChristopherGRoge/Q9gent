@@ -39,6 +39,8 @@ Download pre-built binaries from the [Releases](https://github.com/ChristopherGR
 - **Linux**: `q9gent-linux-x86_64`, `q9gent-linux-aarch64`, `q9gent-linux-x86_64-musl`
 - **macOS**: `q9gent-macos-x86_64`, `q9gent-macos-aarch64`
 
+> **Windows SmartScreen Warning**: Windows may show a security warning because the binaries are not code-signed. This is normal for open-source software. Click "More info" → "Run anyway" to proceed. The binaries are built automatically via GitHub Actions and are safe to use. You can verify the build process in [`.github/workflows/build.yml`](.github/workflows/build.yml).
+
 ## Usage
 
 ### Starting the Server
