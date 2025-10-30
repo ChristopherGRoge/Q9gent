@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  q9gent:
+    build: .
+    container_name: q9gent
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount session storage
+      - ./sessions:/app/sessions
+      # Mount claude config (if needed)
+      - ~/.config/claude:/home/q9gent/.config/claude:ro
+    environment:
+      - RUST_LOG=q9gent=info
+      - CLAUDE_PATH=claude
+    restart: unless-stopped
+    networks:
+      - q9gent-network
+
+networks:
+  q9gent-network:
+    driver: bridge

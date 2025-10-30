@@ -1,0 +1,34 @@
+[package]
+name = "q9gent"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Lightweight Rust CLI Assistant Server for spawning Claude Code Headless processes"
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+axum = { version = "0.7", features = ["json", "ws"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower = "0.5"
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+bytes = "1.7"
+async-stream = "0.3"
+
+[dev-dependencies]
+tempfile = "3.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
