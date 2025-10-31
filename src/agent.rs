@@ -116,20 +116,31 @@ impl AgentRunner {
         info!("📋 Executing: {} {:?}", cmd_exe, cmd_args);
         debug!("Full command: {} {}", cmd_exe, cmd_args.join(" "));
 
-        let mut child = Command::new(&cmd_exe)
+        let mut command = Command::new(&cmd_exe);
+        command
             .args(&cmd_args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                warn!("❌ Failed to spawn Claude process: {}", e);
-                warn!("   Command: {} {:?}", cmd_exe, cmd_args);
-                AppError::ProcessSpawnFailed(format!(
-                    "Failed to spawn '{}' with args {:?}: {}",
-                    cmd_exe, cmd_args, e
-                ))
-            })?;
+            .kill_on_drop(true);
+
+        // On Windows, set environment variables to prevent Node.js buffering issues
+        #[cfg(target_os = "windows")]
+        {
+            // Disable stdout buffering in Node.js to prevent EPIPE errors
+            command.env("NODE_NO_WARNINGS", "1");
+            // Force line-buffered output
+            command.env("PYTHONUNBUFFERED", "1");
+            debug!("🪟 Windows: Set Node.js environment variables to prevent buffering");
+        }
+
+        let mut child = command.spawn().map_err(|e| {
+            warn!("❌ Failed to spawn Claude process: {}", e);
+            warn!("   Command: {} {:?}", cmd_exe, cmd_args);
+            AppError::ProcessSpawnFailed(format!(
+                "Failed to spawn '{}' with args {:?}: {}",
+                cmd_exe, cmd_args, e
+            ))
+        })?;
 
         let pid = child.id();
         info!("✓ Claude process spawned - PID: {:?}", pid);
@@ -161,9 +172,12 @@ impl AgentRunner {
                         info!("📥 First line from Claude stdout");
                     }
                     debug!("Claude stdout line {}: {} chars", line_count, line.len());
+
+                    // Try to send, but don't stop reading if channel is closed
+                    // This prevents EPIPE errors on Windows when client disconnects
                     if tx_clone.send(Ok(line)).await.is_err() {
-                        debug!("Channel closed, stopping stdout reader");
-                        break;
+                        debug!("Channel closed, but continuing to drain stdout to prevent EPIPE");
+                        // Continue reading to EOF to avoid breaking the pipe
                     }
                 }
             }

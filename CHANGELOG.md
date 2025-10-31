@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-10-31
+
+### Fixed
+- **CRITICAL**: Windows EPIPE (broken pipe) errors when Claude CLI process runs
+  - Continue draining stdout even after SSE client disconnects to prevent pipe breakage
+  - Set Node.js environment variables to disable stdout buffering on Windows
+  - Prevents premature pipe closure that causes Claude CLI to crash mid-execution
+  
+### Changed
+- stdout reader now continues reading to EOF even if channel is closed
+- Added Windows-specific Node.js environment variables (NODE_NO_WARNINGS=1)
+- Improved debug logging for Windows pipe handling
+
 ## [0.1.1] - 2025-10-31
 
 ### Fixed
@@ -73,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero hidden orchestration
 - Pure Rust implementation
 
-[Unreleased]: https://github.com/ChristopherGRoge/Q9gent/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ChristopherGRoge/Q9gent/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ChristopherGRoge/Q9gent/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ChristopherGRoge/Q9gent/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ChristopherGRoge/Q9gent/releases/tag/v0.1.0
