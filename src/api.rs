@@ -122,18 +122,35 @@ async fn spawn(
 
     // Spawn the claude process
     info!("⚡ Spawning Claude CLI process...");
-    let (child, mut rx) = state.agent_runner.spawn(agent_request).await?;
+    let (mut child, mut rx) = state.agent_runner.spawn(agent_request).await?;
     info!("✓ Claude process spawned successfully");
 
-    // Store the process if we have a session_id
-    if let Some(ref sid) = session_id {
-        state
-            .running_processes
-            .lock()
-            .await
-            .insert(sid.clone(), child);
-        debug!("Stored process for session: {}", sid);
-    }
+    // Get the child PID for monitoring
+    let child_pid = child.id();
+
+    // Spawn a task to monitor process exit status
+    let monitor_pid = child_pid;
+    let monitor_session = session_id.clone();
+    let monitor_running_procs = state.running_processes.clone();
+    tokio::spawn(async move {
+        match child.wait().await {
+            Ok(status) => {
+                if status.success() {
+                    info!("✅ Process {:?} exited successfully with status: {}", monitor_pid, status);
+                } else {
+                    warn!("⚠️  Process {:?} exited with non-zero status: {}", monitor_pid, status);
+                }
+            }
+            Err(e) => {
+                tracing::error!("❌ Failed to wait for process {:?}: {}", monitor_pid, e);
+            }
+        }
+        
+        // Clean up from running processes if applicable
+        if let Some(sid) = monitor_session {
+            monitor_running_procs.lock().await.remove(&sid);
+        }
+    });
 
     // Create SSE stream
     let stream_session_id = session_id.clone();
@@ -183,7 +200,15 @@ async fn spawn(
             }
         }
 
-        info!("✅ Claude process completed - {} output lines sent", output_count);
+        if output_count == 0 {
+            warn!("⚠️  WARNING: Claude process completed with ZERO output lines!");
+            warn!("   This likely indicates a process spawning or execution failure.");
+            warn!("   Check that Claude CLI is properly installed and accessible.");
+            warn!("   On Windows, ensure .cmd files are executed through cmd.exe wrapper.");
+        } else {
+            info!("✅ Claude process completed - {} output lines sent", output_count);
+        }
+        
         // Send completion event
         let event = Event::default()
             .json_data(serde_json::json!({

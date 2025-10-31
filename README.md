@@ -41,18 +41,57 @@ Download pre-built binaries from the [Releases](https://github.com/ChristopherGR
 
 > **Windows SmartScreen Warning**: Windows may show a security warning because the binaries are not code-signed. This is normal for open-source software. Click "More info" → "Run anyway" to proceed. The binaries are built automatically via GitHub Actions and are safe to use. You can verify the build process in [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
+> **Windows Users**: See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for Windows-specific setup instructions, including how to configure the Claude CLI path for npm-installed executables.
+
 ## Usage
+
+### Prerequisites
+
+**Claude CLI Installation:**
+
+Q9gent requires Claude CLI to be installed. Choose your platform:
+
+- **Windows:** `npm install -g @anthropic/claude-cli`
+- **macOS:** `npm install -g @anthropic/claude-cli`
+- **Linux:** `npm install -g @anthropic/claude-cli`
+- **Docker:** Include `RUN npm install -g @anthropic/claude-cli` in your Dockerfile
+
+**Authentication:**
+```bash
+claude auth login
+```
 
 ### Starting the Server
 
+**Auto-Discovery (Claude in PATH):**
 ```bash
-# Basic usage (defaults: 127.0.0.1:8080, ./sessions)
+# Q9gent automatically finds 'claude' command
 ./q9gent
+```
 
-# Custom configuration
-./q9gent --host 0.0.0.0 --port 3000 --session-dir /var/lib/q9gent/sessions --claude-path /usr/local/bin/claude
+**Explicit Path (Recommended for Production):**
+```bash
+# Windows (npm install)
+q9gent.exe --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
 
-# View all options
+# macOS/Linux (npm install)
+./q9gent --claude-path /usr/local/bin/claude
+
+# Custom installation
+./q9gent --claude-path /path/to/claude
+```
+
+**Full Configuration:**
+```bash
+./q9gent \
+  --host 0.0.0.0 \
+  --port 3000 \
+  --session-dir /var/lib/q9gent/sessions \
+  --claude-path /usr/local/bin/claude
+```
+
+**View Help:**
+```bash
 ./q9gent --help
 ```
 
@@ -60,7 +99,41 @@ Download pre-built binaries from the [Releases](https://github.com/ChristopherGR
 - `-h, --host <HOST>` - Server bind address (default: `127.0.0.1`)
 - `-p, --port <PORT>` - Server port (default: `8080`)
 - `-s, --session-dir <SESSION_DIR>` - Session storage directory (default: `./sessions`)
-- `-c, --claude-path <CLAUDE_PATH>` - Path to claude CLI executable (default: `claude`)
+- `-c, --claude-path <CLAUDE_PATH>` - Path to Claude CLI executable (default: `claude`)
+
+### Platform-Specific Notes
+
+**Windows:**
+- npm installs create `.cmd` wrapper scripts
+- Q9gent automatically wraps `.cmd`/`.bat` files in `cmd.exe /c`
+- See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for details
+
+**macOS/Linux:**
+- npm typically installs to `/usr/local/bin/claude`
+- Direct execution (no wrapper needed)
+- Symlinks are resolved automatically
+
+**Docker:**
+- Install Claude CLI in your container image
+- Specify `--host 0.0.0.0` to accept external connections
+- Mount session directory as volume for persistence
+
+### Docker Deployment
+
+**Example Dockerfile:**
+```dockerfile
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y nodejs npm
+RUN npm install -g @anthropic/claude-cli
+COPY q9gent /usr/local/bin/
+EXPOSE 8080
+CMD ["q9gent", "--host", "0.0.0.0"]
+```
+
+**Run:**
+```bash
+docker run -p 8080:8080 -v ./sessions:/app/sessions q9gent:latest
+```
 
 ### API Endpoints
 

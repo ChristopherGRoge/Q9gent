@@ -71,12 +71,41 @@ Q9gent is a **lightweight, stateless HTTP server** that acts as a process superv
 ### Prerequisites
 
 1. **Claude CLI installed**: Q9gent requires the Claude Code CLI to be installed and accessible
+   
+   **Platform-Specific Installation:**
+   
+   - **Windows (npm):**
+     ```powershell
+     npm install -g @anthropic/claude-cli
+     # Installed at: C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd
+     ```
+   
+   - **macOS (npm):**
+     ```bash
+     npm install -g @anthropic/claude-cli
+     # Installed at: /usr/local/bin/claude or ~/.npm-global/bin/claude
+     ```
+   
+   - **Linux (npm):**
+     ```bash
+     npm install -g @anthropic/claude-cli
+     # Installed at: /usr/local/bin/claude or ~/.npm-global/bin/claude
+     ```
+   
+   - **Docker Container:**
+     ```dockerfile
+     # Include in your Dockerfile
+     RUN npm install -g @anthropic/claude-cli
+     ```
+   
+   **Verify Installation:**
    ```bash
-   # Verify Claude CLI is installed
+   # All platforms
    claude --version
    
-   # Or specify custom path when starting Q9gent
-   ./q9gent --claude-path /path/to/claude
+   # Find exact path
+   which claude        # Unix/macOS/Linux
+   where.exe claude    # Windows
    ```
 
 2. **Claude CLI authenticated**: You must be logged in to Claude
@@ -87,22 +116,67 @@ Q9gent is a **lightweight, stateless HTTP server** that acts as a process superv
 
 ### Starting the Server
 
+Q9gent automatically detects Claude CLI on your system. The `--claude-path` flag provides **maximum flexibility** for all deployment scenarios:
+
+**Scenario 1: Claude in PATH (Auto-Discovery)**
 ```bash
-# Default: localhost:8080, ./sessions directory
+# Q9gent will find 'claude' automatically
 ./q9gent
 
-# Custom configuration
-./q9gent --host 127.0.0.1 --port 3000 --session-dir /var/lib/sessions
+# Works on all platforms if 'claude' is in PATH
+```
 
-# With logging
-RUST_LOG=q9gent=info ./q9gent
+**Scenario 2: npm Global Install (Common)**
+```bash
+# Windows
+./q9gent --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
+
+# macOS/Linux
+./q9gent --claude-path "/usr/local/bin/claude"
+```
+
+**Scenario 3: Custom npm Prefix**
+```bash
+# If you use a custom npm prefix
+./q9gent --claude-path "$HOME/.npm-global/bin/claude"
+```
+
+**Scenario 4: Docker Container**
+```bash
+# Inside container, Claude installed via npm
+docker run -p 8080:8080 q9gent:latest \
+  --claude-path "/usr/local/bin/claude"
+
+# Or if Claude is in PATH inside container
+docker run -p 8080:8080 q9gent:latest
+```
+
+**Scenario 5: Custom Installation Location**
+```bash
+# Any absolute path
+./q9gent --claude-path "/opt/claude/bin/claude"
+./q9gent --claude-path "$HOME/tools/claude"
+```
+
+**With all options:**
+```bash
+./q9gent \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --session-dir /var/lib/sessions \
+  --claude-path /path/to/claude
+```
+
+**With logging:**
+```bash
+RUST_LOG=q9gent=info ./q9gent --claude-path /path/to/claude
 ```
 
 **Console output:**
 ```
 🎯 Q9gent v0.1.0 starting...
 📂 Session directory: ./sessions
-🔧 Claude CLI path: claude
+🔧 Claude CLI path: /path/to/claude
 🚀 Server listening on http://127.0.0.1:8080
 📍 Endpoints: /health, /spawn, /message/:id, /terminate/:id, /sessions
 ```
@@ -1339,11 +1413,82 @@ static SPAWN_DURATION: Histogram = Histogram::new("q9gent_spawn_duration_seconds
 
 ## Deployment Guide
 
+### Platform-Specific Claude CLI Detection
+
+Q9gent is designed to work with Claude CLI on **any platform** and in **any deployment scenario**. The service uses the `--claude-path` flag to locate the Claude executable.
+
+#### Auto-Discovery (Default)
+
+If Claude is in your system PATH:
+```bash
+# Q9gent uses default 'claude' command
+./q9gent
+```
+
+**How it works:**
+- Q9gent spawns `claude` as a child process
+- OS resolves the executable from PATH
+- Works on Windows, macOS, Linux, and Docker
+
+#### Explicit Path (Recommended for Production)
+
+Always specify the exact path in production:
+
+**Windows (npm global):**
+```powershell
+q9gent.exe --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
+```
+
+**macOS (npm global):**
+```bash
+./q9gent --claude-path "/usr/local/bin/claude"
+```
+
+**Linux (npm global):**
+```bash
+./q9gent --claude-path "/usr/local/bin/claude"
+```
+
+**Docker Container:**
+```bash
+# In Dockerfile or docker-compose.yml
+CMD ["./q9gent", "--claude-path", "/usr/local/bin/claude"]
+```
+
 ### Docker Deployment
+
+**Dockerfile Example:**
+```dockerfile
+FROM rust:1.70 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude CLI
+RUN npm install -g @anthropic/claude-cli
+
+# Authenticate Claude (use build-time secret or runtime config)
+# ARG CLAUDE_API_KEY
+# RUN echo $CLAUDE_API_KEY | claude auth login
+
+COPY --from=builder /app/target/release/q9gent /usr/local/bin/
+
+EXPOSE 8080
+
+# Claude is in PATH at /usr/local/bin/claude
+CMD ["q9gent", "--host", "0.0.0.0", "--port", "8080"]
+```
 
 **Build:**
 ```bash
-docker build -t q9gent:0.1.0 .
+docker build -t q9gent:0.1.1 .
 ```
 
 **Run:**
@@ -1351,10 +1496,18 @@ docker build -t q9gent:0.1.0 .
 docker run -d \
   --name q9gent \
   -p 8080:8080 \
-  -v /path/to/sessions:/app/sessions \
-  -v ~/.config/claude:/home/q9gent/.config/claude:ro \
-  -e RUST_LOG=q9gent=info \
-  q9gent:0.1.0
+  -v $(pwd)/sessions:/app/sessions \
+  q9gent:0.1.1
+```
+
+**With explicit Claude path:**
+```bash
+docker run -d \
+  --name q9gent \
+  -p 8080:8080 \
+  -v $(pwd)/sessions:/app/sessions \
+  q9gent:0.1.1 \
+  --claude-path /usr/local/bin/claude
 ```
 
 ### Kubernetes Deployment

@@ -1,6 +1,6 @@
 [package]
 name = "q9gent"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 description = "Lightweight Rust CLI Assistant Server for spawning Claude Code Headless processes"
