@@ -8,20 +8,21 @@
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [Core Design Principles](#core-design-principles)
-3. [System Components](#system-components)
-4. [Request Flow](#request-flow)
-5. [API Reference](#api-reference)
-6. [Data Models](#data-models)
-7. [Process Management](#process-management)
-8. [Session Management](#session-management)
-9. [Error Handling](#error-handling)
-10. [Security Model](#security-model)
-11. [Extension Points](#extension-points)
-12. [Testing Strategy](#testing-strategy)
-13. [Performance Considerations](#performance-considerations)
-14. [Deployment Guide](#deployment-guide)
-15. [Troubleshooting](#troubleshooting)
+2. [How to Use Q9gent](#how-to-use-q9gent)
+3. [Core Design Principles](#core-design-principles)
+4. [System Components](#system-components)
+5. [Request Flow](#request-flow)
+6. [API Reference](#api-reference)
+7. [Data Models](#data-models)
+8. [Process Management](#process-management)
+9. [Session Management](#session-management)
+10. [Error Handling](#error-handling)
+11. [Security Model](#security-model)
+12. [Extension Points](#extension-points)
+13. [Testing Strategy](#testing-strategy)
+14. [Performance Considerations](#performance-considerations)
+15. [Deployment Guide](#deployment-guide)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -62,6 +63,385 @@ Q9gent is a **lightweight, stateless HTTP server** that acts as a process superv
 | **CLI Parsing** | Clap | Command-line argument parsing |
 | **Logging** | Tracing | Structured logging |
 | **Session IDs** | UUID v4 | Unique session identifiers |
+
+---
+
+## How to Use Q9gent
+
+### Prerequisites
+
+1. **Claude CLI installed**: Q9gent requires the Claude Code CLI to be installed and accessible
+   ```bash
+   # Verify Claude CLI is installed
+   claude --version
+   
+   # Or specify custom path when starting Q9gent
+   ./q9gent --claude-path /path/to/claude
+   ```
+
+2. **Claude CLI authenticated**: You must be logged in to Claude
+   ```bash
+   # Login if needed
+   claude auth login
+   ```
+
+### Starting the Server
+
+```bash
+# Default: localhost:8080, ./sessions directory
+./q9gent
+
+# Custom configuration
+./q9gent --host 127.0.0.1 --port 3000 --session-dir /var/lib/sessions
+
+# With logging
+RUST_LOG=q9gent=info ./q9gent
+```
+
+**Console output:**
+```
+🎯 Q9gent v0.1.0 starting...
+📂 Session directory: ./sessions
+🔧 Claude CLI path: claude
+🚀 Server listening on http://127.0.0.1:8080
+📍 Endpoints: /health, /spawn, /message/:id, /terminate/:id, /sessions
+```
+
+### Use Case 1: One-Shot Agent (Stateless)
+
+**Perfect for:** Single-turn tasks where you don't need conversation history.
+
+**Request:**
+```bash
+curl -N -X POST http://localhost:8080/spawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_type": "code_generator",
+    "prompt": "Write a Python function to calculate Fibonacci numbers",
+    "tools_allowed": ["write_file"],
+    "create_session": false
+  }'
+```
+
+**Response (Server-Sent Events):**
+```
+data: {"type":"output","data":"{\"event\":\"text\",\"text\":\"I'll create a Fibonacci function...\"}"}
+
+data: {"type":"output","data":"{\"event\":\"tool_use\",\"name\":\"write_file\",\"input\":{\"path\":\"fibonacci.py\"}}"}
+
+data: {"type":"output","data":"{\"event\":\"text\",\"text\":\"I've created the function.\"}"}
+
+data: {"type":"completed"}
+```
+
+**What happens:**
+1. Q9gent spawns: `claude -p "Write a Python..." --output-format stream-json --verbose --allowedTools write_file`
+2. Streams Claude's JSONL output via SSE
+3. Process exits after completion
+4. No session stored
+
+### Use Case 2: Multi-Turn Conversation (Stateful)
+
+**Perfect for:** Interactive coding sessions, iterative refinement, context retention.
+
+**Step 1: Create session and initial request**
+```bash
+curl -N -X POST http://localhost:8080/spawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_type": "coding_assistant",
+    "prompt": "Create a REST API server in Node.js with Express",
+    "tools_allowed": ["write_file", "read_file"],
+    "create_session": true
+  }'
+```
+
+**Response:**
+```
+data: {"type":"session_created","session_id":"550e8400-e29b-41d4-a716-446655440000"}
+
+data: {"type":"output","data":"{\"event\":\"text\",\"text\":\"I'll create a Node.js server...\"}"}
+
+data: {"type":"completed"}
+```
+
+**Step 2: Continue the conversation (resume session)**
+```bash
+curl -N -X POST http://localhost:8080/message/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Add error handling middleware",
+    "tools_allowed": ["write_file", "read_file"]
+  }'
+```
+
+**What happens:**
+1. Q9gent loads session metadata
+2. Spawns: `claude -p "Add error handling..." --output-format stream-json --verbose --allowedTools write_file,read_file --resume 550e8400-e29b-41d4-a716-446655440000`
+3. Claude resumes with full conversation context
+4. Streams response via SSE
+
+### Use Case 3: Restricted Tool Access
+
+**Perfect for:** Safe execution with limited permissions.
+
+```bash
+curl -N -X POST http://localhost:8080/spawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_type": "code_reviewer",
+    "prompt": "Review the code in main.py and suggest improvements",
+    "tools_allowed": ["read_file"],
+    "create_session": false
+  }'
+```
+
+**What happens:**
+- Claude can ONLY read files
+- Cannot write, execute, or use other tools
+- Tool restriction enforced by Claude CLI via `--allowedTools read_file`
+
+### Use Case 4: Custom System Prompts
+
+**Perfect for:** Role-specific agents, custom behavior.
+
+```bash
+curl -N -X POST http://localhost:8080/spawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_type": "test_generator",
+    "prompt": "Generate unit tests for the calculator module",
+    "tools_allowed": ["read_file", "write_file"],
+    "system_append": "You are a TDD expert. Always write comprehensive test cases with edge cases. Follow pytest conventions.",
+    "create_session": false
+  }'
+```
+
+**What happens:**
+- Spawns: `claude -p "Generate unit tests..." --output-format stream-json --verbose --allowedTools read_file,write_file --append-system-prompt "You are a TDD expert..."`
+- Claude receives additional system instructions
+- Behavior tailored to your requirements
+
+### Use Case 5: Integration with Client Applications
+
+**JavaScript/TypeScript Client:**
+```javascript
+async function spawnAgent(prompt, tools, createSession = false) {
+  const response = await fetch('http://localhost:8080/spawn', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      agent_type: 'assistant',
+      prompt,
+      tools_allowed: tools,
+      create_session: createSession
+    })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let sessionId = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+        
+        if (event.type === 'session_created') {
+          sessionId = event.session_id;
+          console.log('Session:', sessionId);
+        } else if (event.type === 'output') {
+          const claudeOutput = JSON.parse(event.data);
+          console.log('Claude:', claudeOutput);
+        } else if (event.type === 'completed') {
+          console.log('Done!');
+        }
+      }
+    }
+  }
+
+  return sessionId;
+}
+
+// Usage
+const sessionId = await spawnAgent(
+  'Create a TODO app',
+  ['write_file', 'read_file'],
+  true
+);
+
+// Continue conversation
+// ... later, send follow-up message using sessionId
+```
+
+**Python Client:**
+```python
+import requests
+import json
+
+def spawn_agent(prompt, tools=None, create_session=False):
+    response = requests.post(
+        'http://localhost:8080/spawn',
+        json={
+            'agent_type': 'assistant',
+            'prompt': prompt,
+            'tools_allowed': tools or [],
+            'create_session': create_session
+        },
+        stream=True
+    )
+    
+    session_id = None
+    
+    for line in response.iter_lines():
+        if line:
+            if line.startswith(b'data: '):
+                event = json.loads(line[6:])
+                
+                if event['type'] == 'session_created':
+                    session_id = event['session_id']
+                    print(f"Session: {session_id}")
+                elif event['type'] == 'output':
+                    claude_output = json.loads(event['data'])
+                    print(f"Claude: {claude_output}")
+                elif event['type'] == 'completed':
+                    print("Done!")
+                    
+    return session_id
+
+# Usage
+session_id = spawn_agent(
+    'Create a web scraper',
+    tools=['write_file', 'read_file'],
+    create_session=True
+)
+```
+
+### Use Case 6: Health Monitoring
+
+```bash
+# Simple health check
+curl http://localhost:8080/health
+
+# Response
+{
+  "status": "ok",
+  "version": "0.1.0"
+}
+```
+
+**Use for:**
+- Load balancer health checks
+- Container orchestration probes
+- Monitoring systems
+
+### Use Case 7: Session Management
+
+**List all active sessions:**
+```bash
+curl http://localhost:8080/sessions
+```
+
+**Response:**
+```json
+{
+  "sessions": [
+    {
+      "session_id": "550e8400-e29b-41d4-a716-446655440000",
+      "agent_type": "coding_assistant",
+      "created_at": 1730304000,
+      "last_used": 1730304120
+    },
+    {
+      "session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "agent_type": "code_reviewer",
+      "created_at": 1730304060,
+      "last_used": 1730304180
+    }
+  ]
+}
+```
+
+**Terminate a running process:**
+```bash
+curl -X POST http://localhost:8080/terminate/550e8400-e29b-41d4-a716-446655440000
+```
+
+### Use Case 8: Advanced - Custom CLI Flags
+
+```bash
+curl -N -X POST http://localhost:8080/spawn \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_type": "advanced",
+    "prompt": "Analyze the codebase",
+    "tools_allowed": ["read_file"],
+    "flags": ["--max-tokens", "4096"],
+    "create_session": false
+  }'
+```
+
+**What happens:**
+- Spawns: `claude -p "Analyze..." --output-format stream-json --verbose --allowedTools read_file --max-tokens 4096`
+- Custom flags passed directly to Claude CLI
+
+### Common Patterns
+
+#### Pattern 1: Fire-and-Forget Task
+```javascript
+// Stateless, no session tracking needed
+await spawnAgent('Generate documentation', ['read_file', 'write_file'], false);
+```
+
+#### Pattern 2: Interactive Session
+```javascript
+// Create session for multi-turn interaction
+const sessionId = await spawnAgent('Start code review', ['read_file'], true);
+
+// Continue conversation
+await sendMessage(sessionId, 'Check for security issues');
+await sendMessage(sessionId, 'Suggest performance improvements');
+```
+
+#### Pattern 3: Parallel Agents
+```javascript
+// Spawn multiple independent agents concurrently
+const [docs, tests, lint] = await Promise.all([
+  spawnAgent('Generate docs', ['read_file', 'write_file'], false),
+  spawnAgent('Write tests', ['read_file', 'write_file'], false),
+  spawnAgent('Run linter', ['read_file'], false)
+]);
+```
+
+#### Pattern 4: Session Cleanup
+```javascript
+// After conversation complete
+await fetch(`http://localhost:8080/terminate/${sessionId}`, { method: 'POST' });
+```
+
+### What Q9gent Does NOT Do
+
+❌ **Does NOT** execute tools itself (Claude CLI does)  
+❌ **Does NOT** store conversation history (only session metadata)  
+❌ **Does NOT** make agentic decisions  
+❌ **Does NOT** modify prompts or responses  
+❌ **Does NOT** implement authentication (use reverse proxy)  
+❌ **Does NOT** rate limit (use reverse proxy)  
+
+### What Q9gent DOES Do
+
+✅ **Spawns** Claude CLI processes with precise configuration  
+✅ **Streams** real-time JSONL output via SSE  
+✅ **Manages** process lifecycle (spawn, monitor, terminate)  
+✅ **Tracks** session metadata for conversation resumption  
+✅ **Enforces** tool access control (via Claude CLI)  
+✅ **Provides** simple HTTP API for integration  
 
 ---
 
@@ -481,11 +861,14 @@ pub struct AgentRequest {
 claude \
   -p "{prompt}" \
   --output-format stream-json \
+  --verbose \
   --allowedTools {tools_allowed.join(",")} \
   --append-system-prompt "{system_append}" \
   --resume "{resume_id}" \
   {flags.join(" ")}
 ```
+
+**Note:** The `--verbose` flag is required when using `--output-format stream-json` to ensure Claude outputs the full JSONL stream.
 
 ### SessionMetadata
 

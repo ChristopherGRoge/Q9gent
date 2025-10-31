@@ -47,6 +47,7 @@ impl AgentRunner {
             request.prompt.clone(),
             "--output-format".to_string(),
             "stream-json".to_string(),
+            "--verbose".to_string(), // Required for stream-json format
         ];
 
         // Add allowed tools
