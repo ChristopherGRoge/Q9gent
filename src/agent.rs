@@ -79,15 +79,12 @@ impl AgentRunner {
     #[cfg(target_os = "windows")]
     fn prepare_platform_command(&self, args: &[String]) -> (String, Vec<String>) {
         // Check if we're trying to execute a .cmd or .bat file
-        let needs_cmd_wrapper = self.claude_path.to_lowercase().ends_with(".cmd") 
+        let needs_cmd_wrapper = self.claude_path.to_lowercase().ends_with(".cmd")
             || self.claude_path.to_lowercase().ends_with(".bat");
-        
+
         if needs_cmd_wrapper {
             debug!("🪟 Windows: Detected .cmd/.bat file, using cmd.exe wrapper");
-            let mut cmd_args = vec![
-                "/c".to_string(),
-                self.claude_path.clone(),
-            ];
+            let mut cmd_args = vec!["/c".to_string(), self.claude_path.clone()];
             cmd_args.extend_from_slice(args);
             ("cmd.exe".to_string(), cmd_args)
         } else {
@@ -112,10 +109,10 @@ impl AgentRunner {
         let args = self.build_command(&request);
 
         info!("🔨 Building Claude command - {} args", args.len());
-        
+
         // Platform-specific command construction
         let (cmd_exe, cmd_args) = self.prepare_platform_command(&args);
-        
+
         info!("📋 Executing: {} {:?}", cmd_exe, cmd_args);
         debug!("Full command: {} {}", cmd_exe, cmd_args.join(" "));
 
@@ -190,19 +187,29 @@ impl AgentRunner {
                     stderr_count += 1;
                     // Log at ERROR level for visibility
                     tracing::error!("🔴 Claude stderr [{}]: {}", stderr_count, line);
-                    
+
                     // If this looks like a critical error, send it to the output channel too
-                    if line.contains("Error") || line.contains("error") || 
-                       line.contains("failed") || line.contains("Failed") ||
-                       line.contains("cannot") || line.contains("Cannot") {
-                        let _ = tx_error.send(Err(AppError::ProcessExecutionError(
-                            format!("Claude CLI error: {}", line)
-                        ))).await;
+                    if line.contains("Error")
+                        || line.contains("error")
+                        || line.contains("failed")
+                        || line.contains("Failed")
+                        || line.contains("cannot")
+                        || line.contains("Cannot")
+                    {
+                        let _ = tx_error
+                            .send(Err(AppError::ProcessExecutionError(format!(
+                                "Claude CLI error: {}",
+                                line
+                            ))))
+                            .await;
                     }
                 }
             }
             if stderr_count > 0 {
-                warn!("⚠️  Stderr reader finished - {} error lines logged", stderr_count);
+                warn!(
+                    "⚠️  Stderr reader finished - {} error lines logged",
+                    stderr_count
+                );
             } else {
                 debug!("Stderr reader finished - no errors");
             }
@@ -214,8 +221,11 @@ impl AgentRunner {
         tokio::spawn(async move {
             // Give the process a moment to start producing output
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            
-            debug!("⏰ Process monitor: Checking if PID {:?} is still alive", pid_monitor);
+
+            debug!(
+                "⏰ Process monitor: Checking if PID {:?} is still alive",
+                pid_monitor
+            );
             // If we reach here and the channel is closed without sending data,
             // it means the process likely failed silently
         });
@@ -272,9 +282,9 @@ mod tests {
     fn test_windows_cmd_wrapper() {
         let runner = AgentRunner::new("C:\\path\\to\\claude.cmd".to_string());
         let args = vec!["-p".to_string(), "test".to_string()];
-        
+
         let (cmd, cmd_args) = runner.prepare_platform_command(&args);
-        
+
         assert_eq!(cmd, "cmd.exe");
         assert_eq!(cmd_args[0], "/c");
         assert_eq!(cmd_args[1], "C:\\path\\to\\claude.cmd");
@@ -287,9 +297,9 @@ mod tests {
     fn test_windows_bat_wrapper() {
         let runner = AgentRunner::new("claude.BAT".to_string());
         let args = vec!["-p".to_string(), "test".to_string()];
-        
+
         let (cmd, cmd_args) = runner.prepare_platform_command(&args);
-        
+
         assert_eq!(cmd, "cmd.exe");
         assert_eq!(cmd_args[0], "/c");
     }
@@ -299,9 +309,9 @@ mod tests {
     fn test_windows_exe_direct() {
         let runner = AgentRunner::new("claude.exe".to_string());
         let args = vec!["-p".to_string(), "test".to_string()];
-        
+
         let (cmd, cmd_args) = runner.prepare_platform_command(&args);
-        
+
         assert_eq!(cmd, "claude.exe");
         assert_eq!(cmd_args[0], "-p");
     }
@@ -311,9 +321,9 @@ mod tests {
     fn test_unix_direct_execution() {
         let runner = AgentRunner::new("/usr/bin/claude".to_string());
         let args = vec!["-p".to_string(), "test".to_string()];
-        
+
         let (cmd, cmd_args) = runner.prepare_platform_command(&args);
-        
+
         assert_eq!(cmd, "/usr/bin/claude");
         assert_eq!(cmd_args[0], "-p");
         assert_eq!(cmd_args[1], "test");

@@ -136,16 +136,22 @@ async fn spawn(
         match child.wait().await {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ Process {:?} exited successfully with status: {}", monitor_pid, status);
+                    info!(
+                        "✅ Process {:?} exited successfully with status: {}",
+                        monitor_pid, status
+                    );
                 } else {
-                    warn!("⚠️  Process {:?} exited with non-zero status: {}", monitor_pid, status);
+                    warn!(
+                        "⚠️  Process {:?} exited with non-zero status: {}",
+                        monitor_pid, status
+                    );
                 }
             }
             Err(e) => {
                 tracing::error!("❌ Failed to wait for process {:?}: {}", monitor_pid, e);
             }
         }
-        
+
         // Clean up from running processes if applicable
         if let Some(sid) = monitor_session {
             monitor_running_procs.lock().await.remove(&sid);
@@ -208,7 +214,7 @@ async fn spawn(
         } else {
             info!("✅ Claude process completed - {} output lines sent", output_count);
         }
-        
+
         // Send completion event
         let event = Event::default()
             .json_data(serde_json::json!({
