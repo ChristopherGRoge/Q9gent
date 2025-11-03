@@ -97,27 +97,22 @@ async fn spawn(
         payload.resume_id
     );
 
-    // Create session if requested
-    let session_id = if payload.create_session {
-        let metadata = state
-            .session_store
-            .create_session(payload.agent_type.clone())
-            .await?;
-        info!("📝 Created session: {}", metadata.session_id);
-        Some(metadata.session_id)
-    } else {
-        debug!("No session requested (stateless mode)");
-        None
-    };
+    // Note: We'll create the session AFTER getting Claude's session_id from output
+    // This avoids the bug where we try to --resume a non-existent session
+    let should_create_session = payload.create_session;
+    let agent_type_for_session = payload.agent_type.clone();
 
     // Build agent request
+    // IMPORTANT: Only use resume_id if explicitly provided in payload
+    // When create_session=true, we DON'T pass --resume to Claude
+    // (Claude creates its own session which we'll extract from output)
     let agent_request = AgentRequest {
         agent_type: payload.agent_type,
         prompt: payload.prompt,
         flags: payload.flags,
         tools_allowed: payload.tools_allowed,
         system_append: payload.system_append,
-        resume_id: payload.resume_id.or_else(|| session_id.clone()),
+        resume_id: payload.resume_id,  // Don't auto-populate with new session_id
     };
 
     // Spawn the claude process
@@ -130,8 +125,6 @@ async fn spawn(
 
     // Spawn a task to monitor process exit status
     let monitor_pid = child_pid;
-    let monitor_session = session_id.clone();
-    let monitor_running_procs = state.running_processes.clone();
     tokio::spawn(async move {
         match child.wait().await {
             Ok(status) => {
@@ -151,30 +144,16 @@ async fn spawn(
                 tracing::error!("❌ Failed to wait for process {:?}: {}", monitor_pid, e);
             }
         }
-
-        // Clean up from running processes if applicable
-        if let Some(sid) = monitor_session {
-            monitor_running_procs.lock().await.remove(&sid);
-        }
+        debug!("Process {:?} monitoring task completed", monitor_pid);
     });
 
     // Create SSE stream
-    let stream_session_id = session_id.clone();
     let running_procs = state.running_processes.clone();
+    let session_store = state.session_store.clone();
     let stream = async_stream::stream! {
-        // Send initial session info if available
-        if let Some(ref sid) = stream_session_id {
-            info!("📤 Sending session_created event for: {}", sid);
-            let event = Event::default()
-                .json_data(serde_json::json!({
-                    "type": "session_created",
-                    "session_id": sid
-                }))
-                .unwrap();
-            yield Ok(event);
-        }
-
+        let mut claude_session_id: Option<String> = None;
         let mut output_count = 0;
+
         // Stream JSONL lines from claude
         while let Some(result) = rx.recv().await {
             match result {
@@ -182,6 +161,45 @@ async fn spawn(
                     output_count += 1;
                     if output_count == 1 {
                         info!("📥 First output received from Claude");
+
+                        // Parse first line to extract Claude's session_id if creating session
+                        if should_create_session {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
+                                if let Some(sid) = parsed.get("session_id").and_then(|v| v.as_str()) {
+                                    claude_session_id = Some(sid.to_string());
+                                    info!("📝 Extracted Claude session_id: {}", sid);
+
+                                    // Create session metadata with Claude's session_id
+                                    let metadata = crate::session::SessionMetadata {
+                                        session_id: sid.to_string(),
+                                        agent_type: agent_type_for_session.clone(),
+                                        created_at: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
+                                        last_used: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
+                                    };
+
+                                    if let Err(e) = session_store.save_session(&metadata).await {
+                                        warn!("⚠️  Failed to save session metadata: {}", e);
+                                    } else {
+                                        info!("💾 Saved session metadata for: {}", sid);
+
+                                        // Send session_created event
+                                        let event = Event::default()
+                                            .json_data(serde_json::json!({
+                                                "type": "session_created",
+                                                "session_id": sid
+                                            }))
+                                            .unwrap();
+                                        yield Ok(event);
+                                    }
+                                }
+                            }
+                        }
                     }
                     debug!("Output line {}: {} bytes", output_count, line.len());
                     let event = Event::default()
@@ -223,8 +241,8 @@ async fn spawn(
             .unwrap();
         yield Ok(event);
 
-        // Clean up running process
-        if let Some(ref sid) = stream_session_id {
+        // Clean up running process if we tracked one
+        if let Some(ref sid) = claude_session_id {
             running_procs.lock().await.remove(sid);
             debug!("🧹 Cleaned up process for session: {}", sid);
         }
