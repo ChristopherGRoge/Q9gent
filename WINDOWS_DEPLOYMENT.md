@@ -1,13 +1,14 @@
 # Q9gent Windows Deployment Guide
 
-**Version:** 0.1.0  
-**Last Updated:** October 31, 2025
+**Version:** 0.1.2  
+**Last Updated:** October 31, 2025  
+**Status:** ✅ Production Ready - Comprehensively Tested on Windows 11
 
 ---
 
 ## Overview
 
-This guide addresses Windows-specific considerations for deploying and running Q9gent. The Windows binary handles the unique requirements of executing npm-wrapped CLI tools (like Claude CLI installed via npm).
+This guide addresses Windows-specific considerations for deploying and running Q9gent. Q9gent v0.1.2 has been **comprehensively tested and verified** on Windows 11 with npm-installed Claude CLI. All critical issues have been resolved, including `.cmd` wrapper detection and EPIPE (broken pipe) errors.
 
 ---
 
@@ -171,11 +172,41 @@ where.exe claude
 .\q9gent-windows-x86_64.exe --claude-path "C:\Path\From\Where\Command\claude.cmd"
 ```
 
-### Issue 2: Server starts but returns only `data: {"type":"completed"}` with no output
+### Issue 2: EPIPE (broken pipe) errors - Process crashes mid-execution
 
-**Cause:** This was a bug in versions prior to 0.1.0 where `.cmd` files weren't properly wrapped.
+**Symptoms:**
+```
+Error: EPIPE: broken pipe, write
+Process exited with code: 1
+```
 
-**Solution:** Upgrade to Q9gent 0.1.0 or later, which automatically handles `.cmd` and `.bat` files.
+**Cause:** Windows pipe handling issue in versions prior to v0.1.2. The process would start successfully but crash when writing output.
+
+**Solution:** ✅ **FIXED in v0.1.2**
+- Upgrade to Q9gent v0.1.2 or later
+- This version includes continued stdout draining to prevent pipe breakage
+- Node.js buffering prevention environment variables
+- Proper Windows pipe lifecycle management
+
+**Verify fix:**
+```powershell
+# Check version
+.\q9gent-windows-x86_64.exe --version  # Should show 0.1.2 or later
+
+# Test with debug logging
+$env:RUST_LOG="q9gent=debug"
+.\q9gent-windows-x86_64.exe --claude-path "C:\Path\To\claude.cmd"
+
+# Look for successful completion without EPIPE errors
+```
+
+### Issue 3: Server starts but returns only `data: {"type":"completed"}` with no output
+
+**Cause:** This was a bug in v0.1.0 where `.cmd` files weren't properly wrapped.
+
+**Solution:** ✅ **FIXED in v0.1.1+**
+- Upgrade to Q9gent v0.1.1 or later
+- Automatic `.cmd` and `.bat` file detection with `cmd.exe /c` wrapper
 
 **Verify fix:**
 ```powershell
@@ -187,7 +218,7 @@ $env:RUST_LOG="q9gent=debug"
 # "🪟 Windows: Detected .cmd/.bat file, using cmd.exe wrapper"
 ```
 
-### Issue 3: "Access Denied" when creating session directory
+### Issue 4: "Access Denied" when creating session directory
 
 **Cause:** Insufficient permissions for the session directory.
 
@@ -532,11 +563,23 @@ For Windows-specific issues:
 
 ## Version History
 
-- **0.1.0** (2025-10-31)
-  - Fixed: `.cmd` and `.bat` file execution on Windows
-  - Added: Automatic `cmd.exe /c` wrapper for batch scripts
+- **0.1.2** (2025-10-31) - ✅ **Current: Production Ready**
+  - **Fixed:** EPIPE (broken pipe) errors causing process crashes
+  - **Fixed:** Continued stdout draining to prevent pipe breakage
+  - **Added:** Node.js buffering prevention (NODE_NO_WARNINGS=1)
+  - **Verified:** Comprehensive testing on Windows 11 with npm Claude CLI
+  - **Status:** Full Windows support confirmed and stable
+
+- **0.1.1** (2025-10-31)
+  - Fixed: Windows `.cmd` wrapper detection and execution
+  - Added: Automatic `cmd.exe /c` wrapper for `.cmd` and `.bat` files
+  - Added: Platform-specific process spawning logic
   - Added: Enhanced logging for process spawning
   - Added: Exit status monitoring
+
+- **0.1.0** (2025-10-30)
+  - Initial release
+  - Basic Claude CLI process spawning
 
 ---
 

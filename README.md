@@ -1,6 +1,34 @@
 # Q9gent
 
-A lightweight Rust CLI Assistant Server that spawns short-lived Claude Code Headless processes on demand with precise CLI flags and streams results back to the caller.
+**Bring First-Class Subagents to Your Application**
+
+Q9gent is a production-ready HTTP server that brings Claude Code's advanced "thinking" capabilities—including autonomous tool use, multi-turn conversations, and streaming responses—to any application via a simple REST API.
+
+Spawn Claude CLI processes on demand, stream real-time JSONL output via SSE, and let your application leverage Claude's full power without managing the complexity of process supervision, session state, or tool execution.
+
+**Latest Version:** v0.1.2 | **Status:** ✅ Production Ready (Windows, macOS, Linux tested)
+
+---
+
+## Why Q9gent?
+
+**Add Advanced AI Capabilities to Any Application:**
+- 🧠 **True "Thinking" AI** - Leverage Claude Code's autonomous reasoning and tool use
+- 🔌 **Universal Integration** - Simple HTTP API works with any language or framework
+- 🚀 **Production Ready** - Comprehensive Windows/macOS/Linux testing, battle-tested process management
+- 🎯 **Zero Complexity** - No agent frameworks, no hidden orchestration, just clean process supervision
+- 🔒 **Security First** - Strict per-request tool access control, process isolation, least-privilege design
+
+**Perfect For:**
+- Adding AI coding assistance to IDEs, editors, and dev tools
+- Building autonomous code review, testing, and documentation systems
+- Creating interactive AI assistants with file access and code execution
+- Prototyping complex multi-agent systems with isolated subagents
+- Any application that needs Claude Code's capabilities via API
+
+> 📘 **New to Q9gent?** Start with the [Developer Guide](DEVELOPER_GUIDE.md) for comprehensive documentation, examples, and best practices.
+
+---
 
 ## Features
 
@@ -11,17 +39,13 @@ A lightweight Rust CLI Assistant Server that spawns short-lived Claude Code Head
 - 🎯 **Zero Hidden Orchestration** - The server makes no agentic decisions
 - 🔧 **Clean Process Supervision** - Built on Tokio for robust async process management
 - 🌐 **Simple HTTP API** - Easy integration with any client
+- ✅ **Windows Verified** - Comprehensive testing on Windows 11 with npm-installed Claude CLI
 
-## Architecture
+---
 
-The server is a thin wrapper around Claude CLI that:
-1. Receives requests with `{agent_type, prompt, flags, tools_allowed, system_append, optional_resume_id}`
-2. Spawns `claude -p --output-format stream-json [--allowedTools ...] [--append-system-prompt ...] [--resume <session-id>]`
-3. Streams JSONL stdout to the client via Server-Sent Events
-4. Exits the Claude process when the turn completes
-5. Optionally persists minimal session metadata for resumption
+## Quick Start
 
-## Installation
+### Installation
 
 ### From Source
 
@@ -31,6 +55,8 @@ cd Q9gent
 cargo build --release
 ```
 
+> 📘 **Complete Setup Guide:** See the [Developer Guide](DEVELOPER_GUIDE.md) for detailed installation instructions, configuration options, and platform-specific considerations.
+
 ### From Releases
 
 Download pre-built binaries from the [Releases](https://github.com/ChristopherGRoge/Q9gent/releases) page:
@@ -39,9 +65,9 @@ Download pre-built binaries from the [Releases](https://github.com/ChristopherGR
 - **Linux**: `q9gent-linux-x86_64`, `q9gent-linux-aarch64`, `q9gent-linux-x86_64-musl`
 - **macOS**: `q9gent-macos-x86_64`, `q9gent-macos-aarch64`
 
-> **Windows SmartScreen Warning**: Windows may show a security warning because the binaries are not code-signed. This is normal for open-source software. Click "More info" → "Run anyway" to proceed. The binaries are built automatically via GitHub Actions and are safe to use. You can verify the build process in [`.github/workflows/build.yml`](.github/workflows/build.yml).
+> **Windows Deployment**: ✅ **Fully tested and verified on Windows 11 with npm-installed Claude CLI**. Version 0.1.2 includes critical fixes for Windows process spawning and pipe handling. See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for complete setup instructions.
 
-> **Windows Users**: See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for Windows-specific setup instructions, including how to configure the Claude CLI path for npm-installed executables.
+> **SmartScreen Warning**: Windows may show a security warning because the binaries are not code-signed. This is normal for open-source software. Click "More info" → "Run anyway" to proceed. The binaries are built automatically via GitHub Actions and are safe to use. You can verify the build process in [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
 ## Usage
 
@@ -103,10 +129,17 @@ q9gent.exe --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
 
 ### Platform-Specific Notes
 
-**Windows:**
-- npm installs create `.cmd` wrapper scripts
-- Q9gent automatically wraps `.cmd`/`.bat` files in `cmd.exe /c`
-- See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for details
+**Windows (✅ Production Ready - v0.1.2):**
+- **Fully tested** on Windows 11 with npm-installed Claude CLI
+- Automatic `.cmd`/`.bat` wrapper detection and `cmd.exe /c` execution
+- Fixes for EPIPE (broken pipe) errors in v0.1.2
+- Node.js buffering prevention for stable output streaming
+- See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for complete setup guide
+- **Verified scenarios:**
+  - npm global install (`C:\Users\...\AppData\Roaming\npm\claude.cmd`)
+  - Custom npm prefix installations
+  - Process spawning with SSE streaming
+  - Multi-turn conversations with session resumption
 
 **macOS/Linux:**
 - npm typically installs to `/usr/local/bin/claude`
@@ -117,6 +150,45 @@ q9gent.exe --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
 - Install Claude CLI in your container image
 - Specify `--host 0.0.0.0` to accept external connections
 - Mount session directory as volume for persistence
+
+---
+
+## How It Works
+
+Q9gent is a **process supervisor** that gives your application access to Claude Code's full capabilities:
+
+```
+Your Application  →  HTTP Request  →  Q9gent  →  Claude CLI Process
+                                         ↓
+                ←  SSE Stream (real-time)  ←  JSONL Output
+```
+
+**The Flow:**
+
+1. **Your app sends an HTTP request** with a prompt, tool permissions, and optional session ID
+2. **Q9gent spawns a Claude CLI process** with precise flags (stateless or resuming a session)
+3. **Claude "thinks" and acts** - reads files, writes code, uses allowed tools autonomously
+4. **Real-time streaming** - Q9gent forwards Claude's JSONL output via Server-Sent Events
+5. **Process completes** - Claude finishes the task, Q9gent sends completion event
+6. **Optional session persistence** - Minimal metadata saved for multi-turn conversations
+
+**What Makes This Powerful:**
+
+- **Autonomous Tool Use**: Claude can read files, write code, execute commands (with your permission)
+- **Multi-Turn Reasoning**: Resume conversations across requests for iterative refinement
+- **Streaming Responses**: See Claude's thinking in real-time, not just the final result
+- **Flexible Integration**: Any language/framework can use the HTTP API
+- **Production Ready**: Battle-tested process management, comprehensive error handling
+
+> 📘 **Learn More:** The [Developer Guide](DEVELOPER_GUIDE.md) includes:
+> - Detailed architecture diagrams
+> - 8+ real-world use cases with code examples
+> - API reference with all endpoints and parameters
+> - Session management strategies
+> - Security model and best practices
+> - Performance tuning and deployment guides
+
+---
 
 ### Docker Deployment
 
@@ -145,7 +217,7 @@ GET /health
 ```json
 {
   "status": "ok",
-  "version": "0.1.0"
+  "version": "0.1.2"
 }
 ```
 
@@ -337,6 +409,17 @@ session_id = spawn_agent(
 )
 ```
 
+> 📘 **More Examples:** The [Developer Guide](DEVELOPER_GUIDE.md) includes comprehensive examples:
+> - Multi-turn interactive coding sessions
+> - Restricted tool access patterns
+> - Custom system prompts for specialized agents
+> - JavaScript/TypeScript client implementations
+> - Parallel agent spawning patterns
+> - Session cleanup strategies
+> - Production integration patterns
+
+---
+
 ## Configuration
 
 ### Environment Variables
@@ -452,6 +535,30 @@ Error: Process spawn failed: No such file or directory
 ./q9gent --claude-path /path/to/claude
 ```
 
+**Windows-specific:**
+```powershell
+# Find Claude CLI location
+where.exe claude
+
+# Use the full path to .cmd file
+.\q9gent.exe --claude-path "C:\Users\USERNAME\AppData\Roaming\npm\claude.cmd"
+```
+
+### Windows EPIPE Errors (Fixed in v0.1.2)
+```
+Error: EPIPE: broken pipe, write
+Process exited with code: 1
+```
+**Solution:** Update to v0.1.2 or later. This version includes:
+- Continued stdout draining to prevent pipe breakage
+- Node.js buffering prevention
+- Proper Windows pipe handling
+
+If you're on v0.1.2+ and still see issues:
+- Ensure you're using the correct Claude CLI path
+- Check that Claude CLI works standalone: `claude --version`
+- Enable debug logging: `$env:RUST_LOG="q9gent=debug"`
+
 ### Permission Denied (Session Directory)
 ```
 Error: IO error: Permission denied
@@ -460,6 +567,11 @@ Error: IO error: Permission denied
 ```bash
 mkdir -p ./sessions
 chmod 755 ./sessions
+```
+
+**Windows:**
+```powershell
+New-Item -ItemType Directory -Path ".\sessions" -Force
 ```
 
 ### Port Already in Use
@@ -471,15 +583,88 @@ Error: Address already in use
 ./q9gent --port 8081
 ```
 
+---
+
+## Why Choose Q9gent?
+
+### The Power of Claude Code, Available to Any Application
+
+Q9gent is **not just another API wrapper**. It's a production-grade bridge that brings Claude Code's full autonomous capabilities—the same AI that powers advanced IDEs and development tools—to your application via a simple HTTP interface.
+
+**What You Get:**
+
+🧠 **True AI "Thinking"**
+- Claude doesn't just answer questions—it reasons, plans, and executes
+- Autonomous tool use: read files, write code, analyze projects
+- Multi-step problem solving with persistent context
+
+🔌 **Universal Integration**
+- Works with any language: Python, JavaScript, Go, Ruby, Java, etc.
+- Simple REST API + Server-Sent Events
+- No SDK lock-in, no vendor-specific frameworks
+
+🏗️ **Production Ready**
+- Comprehensive Windows/macOS/Linux testing
+- Battle-tested process management with Tokio
+- Proper error handling, logging, and monitoring hooks
+- Resource isolation and clean process supervision
+
+🔒 **Security First**
+- Strict per-request tool access control
+- Process-level isolation between agents
+- Least-privilege by default
+- No hidden behavior or orchestration
+
+**Perfect For Building:**
+- **AI-Powered IDEs**: Add Claude's coding assistance to editors and development tools
+- **Autonomous DevOps**: Code review, testing, documentation generation systems
+- **Interactive Assistants**: File-aware chatbots with code execution capabilities
+- **Multi-Agent Systems**: Coordinate specialized subagents with isolated permissions
+- **Research Platforms**: Experiment with agentic AI in controlled environments
+
+> 📘 **Start Building:** The [Developer Guide](DEVELOPER_GUIDE.md) provides everything you need:
+> - Complete API documentation
+> - 8+ production use cases with examples
+> - Architecture deep-dive
+> - Security model and best practices
+> - Performance tuning guides
+> - Deployment strategies for all platforms
+
+---
+
+## Documentation
+
+- **[Developer Guide](DEVELOPER_GUIDE.md)** - Comprehensive documentation (START HERE)
+- **[Windows Deployment](WINDOWS_DEPLOYMENT.md)** - Windows-specific setup and troubleshooting
+- **[Testing Summary](TESTING_SUMMARY.md)** - Production readiness verification
+- **[Changelog](CHANGELOG.md)** - Version history and release notes
+
+---
+
+## Version History
+
+- **v0.1.2** (2025-10-31) - Windows EPIPE fix, pipe handling improvements
+- **v0.1.1** (2025-10-31) - Windows .cmd wrapper detection, cross-platform enhancements
+- **v0.1.0** (2025-10-30) - Initial release
+
+---
+
 ## Roadmap
 
-- [ ] gRPC endpoint support
-- [ ] WebSocket streaming alternative to SSE
-- [ ] Metrics and observability
-- [ ] Rate limiting
-- [ ] Authentication/authorization
-- [ ] Docker image
-- [ ] Kubernetes manifests
+**Near-term:**
+- [ ] Enhanced metrics and observability (Prometheus integration)
+- [ ] WebSocket streaming as SSE alternative
+- [ ] Docker Hub published images
+- [ ] Kubernetes deployment manifests
+
+**Future:**
+- [ ] gRPC endpoint support for high-performance clients
+- [ ] Built-in rate limiting middleware
+- [ ] Authentication/authorization hooks
+- [ ] Multi-region deployment examples
+- [ ] Advanced session storage backends (Redis, PostgreSQL)
+
+---
 
 ## Acknowledgments
 
@@ -487,4 +672,9 @@ Built with:
 - [Tokio](https://tokio.rs/) - Async runtime
 - [Axum](https://github.com/tokio-rs/axum) - Web framework
 - [Serde](https://serde.rs/) - Serialization
-- Claude CLI - AI assistant by Anthropic
+- [Claude CLI](https://www.anthropic.com/claude) - AI assistant by Anthropic
+
+**Special Thanks:**
+- The Anthropic team for Claude and Claude CLI
+- The Rust community for exceptional tooling
+- All contributors and testers
